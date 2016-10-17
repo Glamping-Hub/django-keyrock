@@ -10,7 +10,7 @@ def read(*rnames):
 
 setup(
     name='django-keyrock',
-    version='0.0.1',
+    version='0.0.2',
     author='Glamping Hub',
     author_email='it@glampinghub.com',
     packages=find_packages('.'),

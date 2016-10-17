@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth import login
 from django.core.urlresolvers import reverse
 from django.http import HttpResponseRedirect
-from django.contrib.site.models import Site
+from django.http.response import Http404
 
 from requests_oauthlib import OAuth2Session
 import requests
@@ -16,36 +16,34 @@ import requests
 
 authorization_base_url = '{}/oauth2/authorize'.format(settings.KEYROCK_URL)
 token_url = '{}/oauth2/token'.format(settings.KEYROCK_URL)
-
-
-def get_redirect_uri():
-    site = Site.objects.get_current()
-    protocol = ''
-    if not site.domain.startswith('http'):
-        protocol = settings.KEYROCK_YOUR_SERVER_PROTOCOL
-    return '{}{}/keyrock/oauth/callback'.format(protocol, site.domain)
+redirect_uri = '{}/keyrock/oauth/callback'.format(settings.KEYROCK_REDIRECT_URL)
 
 
 def keyrock_start_authorization(request):
     keyrock = OAuth2Session(settings.KEYROCK_APP_CLIENT_ID)
     authorization_url, state = keyrock.authorization_url(authorization_base_url)
-    authorization_url += '&redirect_uri={}'.format(get_redirect_uri())
+    authorization_url += '&redirect_uri={}'.format(redirect_uri)
     return HttpResponseRedirect(authorization_url)
 
 
 def keyrock_oauth_callback(request):
     state = request.build_absolute_uri().split('state=')[1].split('&')[0]
-    keyrock = OAuth2Session(settings.KEYROCK_APP_CLIENT_ID, redirect_uri=get_redirect_uri(), state=state)
+    keyrock = OAuth2Session(settings.KEYROCK_APP_CLIENT_ID, redirect_uri=redirect_uri, state=state)
     basic_auth = base64.b64encode('{}:{}'.format(settings.KEYROCK_APP_CLIENT_ID, settings.KEYROCK_APP_CLIENT_SECRET))
     headers = {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Authorization': 'Basic {}'.format(basic_auth)
     }
-    token = keyrock.fetch_token(token_url, client_secret=settings.KEYROCK_APP_CLIENT_SECRET,
-                                code=request.build_absolute_uri().split('code=')[1].split()[0],
-                                verify=False,
-                                headers=headers)
-    request.session['oauth_token'] = token
+    try:
+        code = request.build_absolute_uri().split('code=')[1].split()[0]
+    except:
+        raise Http404
+    else:
+        token = keyrock.fetch_token(
+            token_url, client_secret=settings.KEYROCK_APP_CLIENT_SECRET, code=code,
+            verify=False, headers=headers,
+            auth=(settings.KEYROCK_APP_CLIENT_ID, settings.KEYROCK_APP_CLIENT_SECRET))
+        request.session['oauth_token'] = token
     return HttpResponseRedirect(reverse('keyrock_profile'))
 
 
@@ -67,16 +65,25 @@ def keyrock_profile(request):
 
     try:
         user = user_model.objects.get(email__iexact=email)
-    except user_model.DoesNotExist:
+    except Exception:
         user = user_model()
 
-    user.username = username
+    # AbstractUser.username -> max_length=30
+    user.username = username[:30]
+
+    # AbstractUser.first_name -> max_length=30
+    user.first_name = first_name[:30]
+
+    # AbstractUser.last_name -> max_length=30
+    user.last_name = last_name[:30]
+
     user.email = email
-    user.first_name = first_name
-    user.last_name = last_name
     user.save()
 
+    # dirty hack to login user without password
     user.backend = settings.AUTHENTICATION_BACKENDS[0]
+
+    # log in user and redirect
     login(request, user)
 
     redirect_to = settings.KEYROCK_COMPLETED_LOGIN_URL
