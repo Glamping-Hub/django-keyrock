@@ -1,5 +1,7 @@
 # django-keyrock
 
+[![Code Climate](https://codeclimate.com/github/Glamping-Hub/django-keyrock/badges/gpa.svg)](https://codeclimate.com/github/Glamping-Hub/django-keyrock)
+
 KeyRock Identity Manager client for Django
 
 Made by [https://glampinghub.com](https://glampinghub.com)
